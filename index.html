@@ -216,6 +216,23 @@
           </div>
           <div class="filter-options" id="gradeFilterOptions"></div>
         </div>
+        <div class="filter-group">
+          <div class="filter-group-head">
+            <span>Aggregate Score Columns</span>
+          </div>
+          <div class="filter-options">
+            <label class="filter-option" for="aggToggle_L1R5">
+              <input type="checkbox" id="aggToggle_L1R5" checked><span>L1R5</span>
+            </label>
+            <label class="filter-option" for="aggToggle_L1B5">
+              <input type="checkbox" id="aggToggle_L1B5" checked><span>L1B5</span>
+            </label>
+            <label class="filter-option" for="aggToggle_L1R4">
+              <input type="checkbox" id="aggToggle_L1R4" checked><span>L1R4</span>
+            </label>
+          </div>
+          <p style="font-size:10.5px; color:var(--muted); margin-top:6px;">Shows/hides column sets in Individual Student Analysis.</p>
+        </div>
         <p class="filter-note" id="filterCount"></p>
       </aside>
 
@@ -250,6 +267,7 @@
           <section id="studentSection">
             <div class="section-head"><h2>Individual Student Analysis</h2><span class="count" id="studentCount"></span></div>
             <p class="preview-note" style="margin:0 0 14px;">Uses the same Class / Subject / Grade filters on the left — e.g. select just class 4-1 in the filter panel to see only that class's students here.</p>
+            <p class="preview-note" style="margin:0 0 14px;">L1R5 columns follow: L1 = best of English/Higher Chinese/Higher Malay/Higher Tamil · R1 = best of Math/A Math · R2 = best of the Sciences · R3 = best of Humanities/Geography/Lit in English · R4 &amp; R5 = next two best-scoring remaining subjects. L1B5 uses the same L1, but B1–B5 are simply the five best-scoring remaining subjects overall (no category requirement). Only subjects with a standard A1–F9 grade count — a Mother Tongue subject graded on the Distinction/Merit/Pass/Ungraded scale won't be picked for L1 even if it's a Higher-level subject. If a student doesn't have enough eligible subjects to fill a slot, that slot is counted as <strong>F9*</strong> (9 points) per MOE convention — the asterisk marks a filled-in slot, not a grade the student actually received.</p>
             <input type="text" id="studentSearch" placeholder="Search by student name…" class="student-search">
             <div style="overflow-x:auto; margin-top:14px;">
               <table id="studentTable"></table>
@@ -507,17 +525,26 @@ function parseXlsxRow(row, colMap){
   const classNorm = classRaw ? String(classRaw).trim().replace(/\s+/g,'') : '';
   const oralGrade = get('oralGrade');
   const gradeRaw = get('grade');
-  let grade = null;
+  const base = { examName:'SEAB Export', class: classNorm, teacher:'', student:String(name).trim(),
+    index:String(index), subject: String(subjectText).trim(), mark:'' };
+
+  // Grade and Oral Grade can BOTH be genuine, independent results for the
+  // same subject (e.g. Chinese's written paper AND its oral component) —
+  // not one superseding the other. Emit a record for each that's actually
+  // present, rather than assuming Oral Grade always wins.
+  const records = [];
+  if(gradeRaw !== null && gradeRaw !== undefined && String(gradeRaw).trim() !== ''){
+    const g = String(gradeRaw).trim();
+    if(/^[1-9]$/.test(g)) records.push(Object.assign({}, base, {grade: POINT_TO_GRADE[g], verified:false}));
+    else if(/^[A-Za-z]$/.test(g)) records.push(Object.assign({}, base, {grade: g.toUpperCase(), verified:false}));
+  }
   if(oralGrade && String(oralGrade).trim()){
     const g = String(oralGrade).trim().toUpperCase();
-    grade = ORAL_ALIAS[g] || ORAL_ALIAS[g.slice(0,1)] || g.slice(0,1);
-  } else if(gradeRaw !== null && gradeRaw !== undefined && String(gradeRaw).trim() !== ''){
-    const g = String(gradeRaw).trim();
-    if(/^[1-9]$/.test(g)) grade = POINT_TO_GRADE[g];
-    else if(/^[A-Za-z]$/.test(g)) grade = g.toUpperCase();
+    const oGrade = ORAL_ALIAS[g] || ORAL_ALIAS[g.slice(0,1)] || g.slice(0,1);
+    records.push(Object.assign({}, base, {grade: oGrade, verified:false}));
   }
-  return { examName:'SEAB Export', class: classNorm, teacher:'', student:String(name).trim(),
-    index:String(index), subject: String(subjectText).trim(), mark:'', grade, verified:false };
+  if(records.length === 0) return null;
+  return records.length === 1 ? records[0] : records;
 }
 const DEFAULT_XLSX_COLMAP = {index:0,name:1,sexLevel:2,class:3,rawCode:4,subjectCode:5,subject:6,grade:7,oralGrade:8};
 
@@ -671,7 +698,7 @@ function processXlsxFile(name, arrayBuffer){
     const r = rows[i];
     if(!r || !r[colMap.index]) continue;
     const rec = parseXlsxRow(r, colMap);
-    if(rec) records.push(rec); else failed++;
+    if(rec) records = records.concat(rec); else failed++;
   }
   if(records.length === 0){
     showError(`No usable rows found in "${name}".`);
@@ -1214,21 +1241,126 @@ document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape') closeChartModal();
 });
 
+/* ===================== L1R5 AGGREGATE SCORE ===================== */
+const L1R5_RULES = {
+  L1: ['english','english language','higher chinese','higher malay','higher tamil'],
+  R1: ['mathematics','additional mathematics'],
+  R2: ['sci (phy/chem)','sci (chem/bio)','sci (phy/bio)','physics','chemistry','biology'],
+  R3: ['humanities (ss/geography)','humanities (ss/history)','geography','literature in english'],
+};
+
+function computeL1R5(standardRecs){
+  function pickBest(pool, names){
+    const matches = pool.filter(r => names.includes(r.subject.toLowerCase()));
+    if(!matches.length) return null;
+    return matches.reduce((a,b)=> b.points<a.points?b:a);
+  }
+  let remaining = [...standardRecs];
+  const l1 = pickBest(remaining, L1R5_RULES.L1); if(l1) remaining = remaining.filter(r=>r!==l1);
+  const r1 = pickBest(remaining, L1R5_RULES.R1); if(r1) remaining = remaining.filter(r=>r!==r1);
+  const r2 = pickBest(remaining, L1R5_RULES.R2); if(r2) remaining = remaining.filter(r=>r!==r2);
+  const r3 = pickBest(remaining, L1R5_RULES.R3); if(r3) remaining = remaining.filter(r=>r!==r3);
+  remaining.sort((a,b)=>a.points-b.points);
+  const r4 = remaining[0] || null;
+  const r5 = remaining[1] || null;
+  const picks = {L1:l1, R1:r1, R2:r2, R3:r3, R4:r4, R5:r5};
+  // Any slot with no eligible subject is filled with F9 (9 points) — the
+  // standard MOE convention for a slot the student can't fill — rather than
+  // leaving the aggregate incomplete.
+  Object.keys(picks).forEach(k=>{
+    if(!picks[k]) picks[k] = { subject: null, gradeLetter: 'F9', points: 9, filled: true };
+  });
+  const total = Object.values(picks).reduce((s,p)=>s+p.points,0);
+  const anyFilled = Object.values(picks).some(p=>p.filled);
+  return { picks, total, complete: true, anyFilled };
+}
+
+/* L1B5: same L1 rule as L1R5, but B1–B5 are simply the five lowest-scoring
+   remaining subjects overall — no R1/R2/R3 category requirement. */
+function computeL1B5(standardRecs){
+  function pickBest(pool, names){
+    const matches = pool.filter(r => names.includes(r.subject.toLowerCase()));
+    if(!matches.length) return null;
+    return matches.reduce((a,b)=> b.points<a.points?b:a);
+  }
+  let remaining = [...standardRecs];
+  const l1 = pickBest(remaining, L1R5_RULES.L1); if(l1) remaining = remaining.filter(r=>r!==l1);
+  remaining.sort((a,b)=>a.points-b.points);
+  const bPicks = remaining.slice(0,5);
+  const picks = { L1: l1, B1: bPicks[0]||null, B2: bPicks[1]||null, B3: bPicks[2]||null, B4: bPicks[3]||null, B5: bPicks[4]||null };
+  Object.keys(picks).forEach(k=>{
+    if(!picks[k]) picks[k] = { subject: null, gradeLetter: 'F9', points: 9, filled: true };
+  });
+  const total = Object.values(picks).reduce((s,p)=>s+p.points,0);
+  const anyFilled = Object.values(picks).some(p=>p.filled);
+  return { picks, total, complete: true, anyFilled };
+}
+
+/* L1R4: same rules as L1R5 (L1, R1 Math/AMath, R2 Science, R3 Humanities)
+   but stops there — no R4/R5 "best remaining" picks, so only 5 subjects
+   count in total rather than 6. */
+function computeL1R4(standardRecs){
+  function pickBest(pool, names){
+    const matches = pool.filter(r => names.includes(r.subject.toLowerCase()));
+    if(!matches.length) return null;
+    return matches.reduce((a,b)=> b.points<a.points?b:a);
+  }
+  let remaining = [...standardRecs];
+  const l1 = pickBest(remaining, L1R5_RULES.L1); if(l1) remaining = remaining.filter(r=>r!==l1);
+  const r1 = pickBest(remaining, L1R5_RULES.R1); if(r1) remaining = remaining.filter(r=>r!==r1);
+  const r2 = pickBest(remaining, L1R5_RULES.R2); if(r2) remaining = remaining.filter(r=>r!==r2);
+  const r3 = pickBest(remaining, L1R5_RULES.R3); if(r3) remaining = remaining.filter(r=>r!==r3);
+  remaining.sort((a,b)=>a.points-b.points);
+  const r4 = remaining[0] || null;
+  const picks = {L1:l1, R1:r1, R2:r2, R3:r3, R4:r4};
+  Object.keys(picks).forEach(k=>{
+    if(!picks[k]) picks[k] = { subject: null, gradeLetter: 'F9', points: 9, filled: true };
+  });
+  const total = Object.values(picks).reduce((s,p)=>s+p.points,0);
+  const anyFilled = Object.values(picks).some(p=>p.filled);
+  return { picks, total, complete: true, anyFilled };
+}
+
 /* ===================== STUDENT ANALYSIS (individual pivot view) ===================== */
 window._studentRows = [];
 
 function renderStudentAnalysis(records){
-  const bySubjectOrder = [...new Set(records.map(r=>r.subject))].sort();
+  const writtenSubjects = new Set();
+  const oralSubjects = new Set();
+  records.forEach(r=>{
+    const c = classify(r);
+    if(c.scale === 'oral') oralSubjects.add(r.subject);
+    else writtenSubjects.add(r.subject);
+  });
+  // Only split a subject into a separate "(Oral)" column when it genuinely
+  // has BOTH a written and an oral grade for at least one student — that's
+  // the actual collision case. A subject that only ever appears on the
+  // oral scale (e.g. Chinese/Malay/Tamil in most SEAB exports) stays as a
+  // normal column under its own name; renaming it would just hide it from
+  // where people expect to find it.
+  const bothScales = new Set([...oralSubjects].filter(s => writtenSubjects.has(s)));
+  const mainCols = new Set([...writtenSubjects, ...[...oralSubjects].filter(s => !bothScales.has(s))]);
+
   const byStudent = {};
   records.forEach(r=>{
     const key = r.index !== undefined ? r.index : r.student;
-    if(!byStudent[key]) byStudent[key] = { name:r.student, class:r.class, grades:{} };
+    if(!byStudent[key]) byStudent[key] = { name:r.student, class:r.class, grades:{}, oralGrades:{}, standardRecs:[] };
     const c = classify(r);
-    byStudent[key].grades[r.subject] = c.gradeLetter || 'Pending';
+    if(c.scale === 'oral' && bothScales.has(r.subject)){
+      byStudent[key].oralGrades[r.subject] = c.gradeLetter || 'Pending';
+    } else {
+      byStudent[key].grades[r.subject] = c.gradeLetter || 'Pending';
+    }
+    if(c.scale === 'standard' && c.gradeLetter){
+      const band = STANDARD_BANDS.find(b=>b.grade===c.gradeLetter);
+      if(band) byStudent[key].standardRecs.push({subject:r.subject, gradeLetter:c.gradeLetter, points:band.points});
+    }
   });
+  Object.values(byStudent).forEach(s=>{ s.l1r5 = computeL1R5(s.standardRecs); s.l1b5 = computeL1B5(s.standardRecs); s.l1r4 = computeL1R4(s.standardRecs); });
   window._studentRows = Object.values(byStudent).sort((a,b)=>
     a.class.localeCompare(b.class) || a.name.localeCompare(b.name));
-  window._studentSubjectCols = bySubjectOrder;
+  window._studentSubjectCols = [...mainCols].sort();
+  window._studentOralCols = [...bothScales].sort();
   document.getElementById('studentCount').textContent = window._studentRows.length + ' student(s)';
   renderStudentTable();
 }
@@ -1243,6 +1375,7 @@ function gradeCellClass(g){
 function renderStudentTable(){
   const rows = window._studentRows || [];
   const cols = window._studentSubjectCols || [];
+  const oralCols = window._studentOralCols || [];
   const query = (document.getElementById('studentSearch').value || '').trim().toLowerCase();
   const filtered = query ? rows.filter(r=>r.name.toLowerCase().includes(query)) : rows;
 
@@ -1252,9 +1385,31 @@ function renderStudentTable(){
     return;
   }
 
+  const l1r5Cols = ['L1','R1','R2','R3','R4','R5'];
+  const l1b5Cols = ['L1','B1','B2','B3','B4','B5'];
+  const l1r4Cols = ['L1','R1','R2','R3','R4'];
+  const showL1R5 = document.getElementById('aggToggle_L1R5').checked;
+  const showL1B5 = document.getElementById('aggToggle_L1B5').checked;
+  const showL1R4 = document.getElementById('aggToggle_L1R4').checked;
+
+  function aggCell(pick){
+    if(pick.filled){
+      return `<td style="color:var(--warn); font-style:italic;" title="No eligible subject for this slot — counted as F9">F9* <span style="color:var(--muted); font-size:10px;">(9)</span></td>`;
+    }
+    return `<td title="${escapeHtml(pick.subject)}">${escapeHtml(pick.gradeLetter)} <span style="color:var(--muted); font-size:10px;">(${pick.points})</span></td>`;
+  }
+  function aggTotalCell(result){
+    return `<td style="font-weight:800; color:var(--navy); font-size:14px;">${result.total}${result.anyFilled?'*':''}</td>`;
+  }
+
   let head = '<tr><th class="left">Student</th><th>Class</th>';
   cols.forEach(c=> head += `<th>${escapeHtml(c)}</th>`);
-  head += '<th>No. Subjects</th></tr>';
+  oralCols.forEach(c=> head += `<th>${escapeHtml(c)} (Oral)</th>`);
+  head += '<th>No. Subjects</th>';
+  if(showL1R5){ l1r5Cols.forEach(k=> head += `<th>${k}</th>`); head += '<th>L1R5</th>'; }
+  if(showL1B5){ l1b5Cols.forEach(k=> head += `<th>${k}</th>`); head += '<th>L1B5</th>'; }
+  if(showL1R4){ l1r4Cols.forEach(k=> head += `<th>${k}</th>`); head += '<th>L1R4</th>'; }
+  head += '</tr>';
 
   let body = '';
   filtered.forEach(s=>{
@@ -1269,12 +1424,28 @@ function renderStudentTable(){
         body += '<td style="color:var(--line);">—</td>';
       }
     });
-    body += `<td>${count}</td></tr>`;
+    oralCols.forEach(c=>{
+      const g = s.oralGrades[c];
+      if(g){
+        count++;
+        body += `<td class="grade-cell ${gradeCellClass(g)}">${escapeHtml(g)}</td>`;
+      } else {
+        body += '<td style="color:var(--line);">—</td>';
+      }
+    });
+    body += `<td>${count}</td>`;
+    if(showL1R5){ l1r5Cols.forEach(k=> body += aggCell(s.l1r5.picks[k])); body += aggTotalCell(s.l1r5); }
+    if(showL1B5){ l1b5Cols.forEach(k=> body += aggCell(s.l1b5.picks[k])); body += aggTotalCell(s.l1b5); }
+    if(showL1R4){ l1r4Cols.forEach(k=> body += aggCell(s.l1r4.picks[k])); body += aggTotalCell(s.l1r4); }
+    body += '</tr>';
   });
   document.getElementById('studentTable').innerHTML = head + body;
 }
 
 document.getElementById('studentSearch').addEventListener('input', renderStudentTable);
+['aggToggle_L1R5','aggToggle_L1B5','aggToggle_L1R4'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderStudentTable);
+});
 
 /* ===================== PAGE TABS ===================== */
 document.querySelectorAll('.page-tab').forEach(btn=>{
