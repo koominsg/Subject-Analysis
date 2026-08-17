@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Subject Analysis — Upload &amp; Analyze</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --navy:#14304D;
+    --navy-light:#294B70;
+    --gold:#C9971F;
+    --cream:#F6F3EC;
+    --card:#FFFFFF;
+    --ink:#1F2733;
+    --muted:#6B7280;
+    --line:#E4E0D6;
+    --good:#2F7A4F;
+    --warn:#B5502F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--cream); color:var(--ink);
+    font-family:'Inter',-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Source Serif 4', Georgia, serif; font-weight:700; margin:0; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:36px 24px 80px; }
+
+  header.top{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:28px; border-bottom:2px solid var(--navy); padding-bottom:18px;}
+  header.top h1{ font-size:30px; color:var(--navy); letter-spacing:-.01em;}
+  header.top .eyebrow{ font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:600; margin-bottom:6px;}
+  header.top .sub{ color:var(--muted); font-size:14px; max-width:360px; text-align:right;}
+
+  .dropzone{
+    background:var(--card); border:2px dashed var(--navy-light); border-radius:10px;
+    padding:38px 24px; text-align:center; cursor:pointer; transition:.15s border-color, .15s background;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--gold); background:#FFFDF7; }
+  .dropzone h3{ color:var(--navy); font-size:20px; margin-bottom:6px;}
+  .dropzone p{ color:var(--muted); font-size:13px; margin:4px 0 0; }
+  .dropzone input{ display:none; }
+  .file-pill{ display:inline-block; margin-top:14px; background:var(--navy); color:#fff; font-size:12px; padding:6px 14px; border-radius:100px; }
+
+  .toolbar{ display:flex; gap:10px; justify-content:flex-end; margin:14px 0 6px; flex-wrap:wrap;}
+  button.btn{
+    font-family:inherit; font-size:13px; font-weight:600; padding:9px 16px; border-radius:7px;
+    border:1px solid var(--navy); background:#fff; color:var(--navy); cursor:pointer;
+  }
+  button.btn.primary{ background:var(--navy); color:#fff; }
+  button.btn:hover{ opacity:.85; }
+
+  .banner{ border-radius:8px; padding:12px 16px; font-size:13px; margin:14px 0; display:none;}
+  .banner.error{ background:#FBEAE4; color:var(--warn); border:1px solid #E8B9A5; display:block;}
+  .banner.info{ background:#EAF1FB; color:var(--navy); border:1px solid #C7D8ED; display:block;}
+
+  section{ margin-top:40px; }
+  section > .section-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:14px;}
+  section > .section-head h2{ font-size:21px; color:var(--navy);}
+  section > .section-head .count{ font-size:12px; color:var(--muted); }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+  .kpi{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; text-align:center;}
+  .kpi .label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; margin-bottom:8px;}
+  .kpi .value{ font-family:'Source Serif 4',Georgia,serif; font-size:24px; color:var(--navy); font-weight:700; }
+
+  table{ width:100%; border-collapse:collapse; background:var(--card); font-size:12.5px; }
+  table caption{ text-align:left; font-family:'Source Serif 4',Georgia,serif; font-size:17px; color:var(--navy); padding:10px 0 8px; font-weight:700;}
+  th, td{ border:1px solid var(--line); padding:6px 8px; text-align:center; }
+  th{ background:var(--navy); color:#fff; font-weight:600; font-size:11.5px; }
+  td.left{ text-align:left; }
+  tr.summary td{ background:#FBF4E3; font-weight:700; }
+  .subject-block{ margin-bottom:26px; border-radius:10px; overflow:hidden; border:1px solid var(--line); }
+  .subject-block-title{ background:var(--navy-light); color:#fff; padding:8px 14px; font-family:'Source Serif 4',Georgia,serif; font-size:15px; display:flex; justify-content:space-between;}
+  .subject-block-title span.scale{ font-family:'Inter',sans-serif; font-size:11px; opacity:.85; font-weight:500; }
+
+  .preview-note{ font-size:12.5px; color:var(--muted); margin-top:8px; }
+  .charts{ display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:18px;}
+  .chart-card{ background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .chart-card h4{ font-size:13px; color:var(--navy); margin:0 0 10px; font-weight:600; }
+  canvas{ max-height:320px; }
+
+  footer{ margin-top:60px; text-align:center; font-size:12px; color:var(--muted); }
+
+  .results-layout{ display:grid; grid-template-columns:220px 1fr; gap:24px; align-items:start; }
+  .filter-panel{
+    position:sticky; top:16px; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:16px; max-height:calc(100vh - 32px); overflow-y:auto;
+  }
+  .filter-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .filter-head h3{ font-family:'Source Serif 4',Georgia,serif; font-size:16px; color:var(--navy); }
+  .filter-reset{ font-size:11px; color:var(--warn); background:none; border:none; cursor:pointer; font-weight:600; padding:0;}
+  .filter-reset:hover{ text-decoration:underline; }
+  .filter-group{ margin-bottom:18px; }
+  .filter-group-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+  .filter-group-head span:first-child{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--navy); }
+  .filter-linklike{ font-size:11px; color:var(--navy-light); cursor:pointer; font-weight:600; }
+  .filter-linklike:hover{ text-decoration:underline; }
+  .filter-options{ display:flex; flex-direction:column; gap:5px; max-height:220px; overflow-y:auto; padding-right:4px; }
+  .filter-option{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink); cursor:pointer; }
+  .filter-option input{ accent-color:var(--navy); cursor:pointer; margin:0; flex-shrink:0; }
+  .filter-option span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .filter-note{ font-size:11px; color:var(--muted); margin-top:4px; border-top:1px solid var(--line); padding-top:10px; }
+  .results-main{ min-width:0; }
+  @media (max-width:900px){
+    .results-layout{ grid-template-columns:1fr; }
+    .filter-panel{ position:static; max-height:none; }
+  }
+  @media (max-width:900px){ .kpi-grid{grid-template-columns:repeat(2,1fr);} .charts{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">Subject Analysis</div>
+      <h1>Upload a results file, get the breakdown instantly</h1>
+    </div>
+    <div class="sub">Supports SEAB/MOE fixed-width result exports, a decoded SEAB spreadsheet (.xlsx), or a CSV with Exam&nbsp;Name / Class / Subject / Teacher / Student&nbsp;Name / Mark / Grade columns.</div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <h3>Drop a results file here, or click to choose</h3>
+    <p>.txt (SEAB export), .xlsx (decoded spreadsheet), or .csv &nbsp;·&nbsp; you can add more than one file — records are combined</p>
+    <input type="file" id="fileInput" accept=".txt,.csv,.xlsx,.xls" multiple>
+    <div id="filePills"></div>
+  </div>
+
+  <div class="banner" id="errorBanner"></div>
+  <div class="banner" id="infoBanner"></div>
+
+  <section id="legendSection">
+    <div class="section-head"><h2 style="font-size:16px;">Subject Code Legend</h2><span class="count">from SEAB's published subject code tables — click to expand</span></div>
+    <details>
+      <summary style="cursor:pointer; font-size:12.5px; color:var(--navy); margin-bottom:8px;">Show all recognised codes</summary>
+      <div style="overflow-x:auto; max-height:260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;">
+        <table id="legendTable"></table>
+      </div>
+    </details>
+  </section>
+
+  <div id="results" style="display:none;">
+
+    <div class="toolbar">
+      <button class="btn" id="clearBtn">Clear all data</button>
+      <button class="btn primary" id="exportBtn">Export analysis to Excel</button>
+    </div>
+
+    <div class="results-layout">
+      <aside class="filter-panel" id="filterPanel">
+        <div class="filter-head">
+          <h3>Filters</h3>
+          <button class="filter-reset" id="filterResetBtn">Reset</button>
+        </div>
+        <div class="filter-group">
+          <div class="filter-group-head">
+            <span>Class</span>
+            <span class="filter-linklike" id="classAllBtn">All</span>
+          </div>
+          <div class="filter-options" id="classFilterOptions"></div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-group-head">
+            <span>Subject</span>
+            <span class="filter-linklike" id="subjectAllBtn">All</span>
+          </div>
+          <div class="filter-options" id="subjectFilterOptions"></div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-group-head">
+            <span>Grade</span>
+            <span class="filter-linklike" id="gradeAllBtn">All</span>
+          </div>
+          <div class="filter-options" id="gradeFilterOptions"></div>
+        </div>
+        <p class="filter-note" id="filterCount"></p>
+      </aside>
+
+      <div class="results-main">
+        <section id="previewSection">
+          <div class="section-head"><h2>Parsed Records — Preview</h2><span class="count" id="previewCount"></span></div>
+          <div style="overflow-x:auto;">
+            <table id="previewTable"></table>
+          </div>
+          <p class="preview-note">Spot-check a few rows above against the original file — if a name, class, subject or grade looks off, the file's layout may differ from what this app assumes. Nothing below is final until you've checked it.</p>
+        </section>
+
+        <section id="dashboardSection">
+          <div class="section-head"><h2>Dashboard</h2></div>
+          <div class="kpi-grid" id="kpiGrid"></div>
+          <div class="charts" id="chartsGrid"></div>
+        </section>
+
+        <section id="subjectSection">
+          <div class="section-head"><h2>Subject Analysis</h2><span class="count" id="subjectCount"></span></div>
+          <div id="subjectTables"></div>
+        </section>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Runs entirely in your browser — no data is uploaded anywhere.</footer>
+</div>
+
+<script>
+/* ===================== SEAB OFFICIAL SUBJECT CODE DIRECTORY ===================== */
+/* Sourced from SEAB's published Cambridge Subjects / Local Subjects code tables. */
+const SEAB_SUBJECT_CODES = {
+  '1135':'Arabic as a 3rd Language', '1136':'Bahasa Indonesia as a 3rd Language',
+  '1184':'English Language', '2065':'Literature in English', '2174':'History',
+  '2260':'Humanities (SS/Geography)', '2261':'Humanities (SS/History)',
+  '2262':'Humanities (SS/Lit in English)', '2279':'Geography', '2286':'Economics',
+  '2299':'Drama', '3034':'Spanish', '3194':'Hindi', '3196':'Urdu', '3199':'Gujarati',
+  '3203':'Panjabi', '3215':'Bengali', '3249':'Burmese', '3260':'Thai', '3917':'French',
+  '3918':'German', '3919':'Japanese', '4049':'Additional Mathematics', '4052':'Mathematics',
+  '5086':'Sci (Phy/Chem)', '5087':'Sci (Phy/Bio)', '5088':'Sci (Chem/Bio)',
+  '6063':'Electronics', '6085':'Music', '6086':'Higher Music', '6091':'Physics',
+  '6092':'Chemistry', '6093':'Biology', '6097':'Nutrition and Food Science (NFS)',
+  '6114':'Art', '6124':'Higher Art', '7059':'Design & Technology (DnT)',
+  '7085':'Business Studies', '7087':'Principles of Accounts', '7155':'Computing',
+  '1116':'Higher Chinese', '1153':'Chinese B', '1160':'Chinese',
+  '1166':'Chinese (Special Programme)', '2031':'Literature in Chinese',
+  '1117':'Higher Malay', '1133':'Malay (Special Programme)', '1148':'Malay',
+  '1151':'Malay B', '2032':'Literature in Malay',
+  '1147':'Higher Tamil', '1152':'Tamil B', '1157':'Tamil', '2033':'Literature in Tamil',
+  '2263':'Humanities (SS/Lit in Chinese)', '2264':'Humanities (SS/Lit in Malay)',
+  '2265':'Humanities (SS/Lit in Tamil)', '6081':'Exercise and Sports Science',
+  '5076':'Sci (Phy/Chem)', '6123':'Art (legacy code, pre-2026 syllabus)',
+  '2272':'Humanities (SS/Geography)', '2273':'Humanities (SS/History)',
+};
+
+/* ===================== GRADE SCALES ===================== */
+const STANDARD_BANDS = [
+  {grade:'A1', min:75, points:1}, {grade:'A2', min:70, points:2},
+  {grade:'B3', min:65, points:3}, {grade:'B4', min:60, points:4},
+  {grade:'C5', min:55, points:5}, {grade:'C6', min:50, points:6},
+  {grade:'D7', min:45, points:7}, {grade:'E8', min:40, points:8},
+  {grade:'F9', min:0,  points:9},
+];
+const STANDARD_ORDER = STANDARD_BANDS.map(b=>b.grade);
+const ORAL_ORDER = ['D','M','P','U'];
+const ORAL_LABEL = {D:'Distinction', M:'Merit', P:'Pass', U:'Ungraded'};
+const ORAL_ALIAS = {DI:'D', ME:'M', PA:'P', UG:'U', D:'D', M:'M', P:'P', U:'U'};
+
+const POINT_TO_GRADE = {}; STANDARD_BANDS.forEach(b=>POINT_TO_GRADE[b.points]=b.grade);
+
+function markToGrade(mark){
+  for(const b of STANDARD_BANDS){ if(mark >= b.min) return b.grade; }
+  return 'F9';
+}
+function classify(rec){
+  // rec: {mark, grade}
+  if(rec.mark !== null && rec.mark !== undefined && rec.mark !== '' && !isNaN(rec.mark)){
+    return {scale:'standard', gradeLetter: markToGrade(Number(rec.mark))};
+  }
+  if(rec.grade){
+    const g = String(rec.grade).trim().toUpperCase();
+    if(STANDARD_ORDER.includes(g)) return {scale:'standard', gradeLetter:g};
+    if(ORAL_ALIAS[g]) return {scale:'oral', gradeLetter:ORAL_ALIAS[g]};
+    return {scale:'other', gradeLetter:g};
+  }
+  return {scale:'unknown', gradeLetter:null};
+}
+
+/* ===================== GENERIC CODE DECODER ===================== */
+/* Decodes a bare numeric subject-result code into {subject, gradeLetter}.
+   Single-paper subjects (Math, Sciences, etc.): 6 chars = 1 prefix digit +
+   4-digit SEAB subject code + 1 grade-point digit (1=A1 ... 9=F9).
+   Mother Tongue Language subjects: 7 chars = 1 prefix digit + 4-digit SEAB
+   subject code + 1 paper/component digit + 1 grade LETTER (D/M/P/U). */
+function decodeSubjectCode(tok){
+  if(/^\d{6}$/.test(tok)){
+    const code4 = tok.substring(1,5);
+    const gradePoint = tok[5];
+    const gradeLetter = POINT_TO_GRADE[gradePoint] || null;
+    const subject = SEAB_SUBJECT_CODES[code4] || ('Unmapped code ' + code4);
+    return {subject, grade: gradeLetter};
+  }
+  const m = tok.match(/^(\d{6})([A-Z])$/);
+  if(m){
+    const code4 = m[1].substring(1,5);
+    const gradeLetter = ORAL_ALIAS[m[2]] || m[2];
+    const subject = SEAB_SUBJECT_CODES[code4] || ('Unmapped code ' + code4);
+    return {subject, grade: gradeLetter};
+  }
+  // Shorter MTL variant with no separate paper/component digit: 1 prefix
+  // digit + 4-digit SEAB code + grade letter directly (5 digits + letter).
+  const m2 = tok.match(/^(\d{5})([A-Z])$/);
+  if(m2){
+    const code4 = m2[1].substring(1,5);
+    const gradeLetter = ORAL_ALIAS[m2[2]] || m2[2];
+    const subject = SEAB_SUBJECT_CODES[code4] || ('Unmapped code ' + code4);
+    return {subject, grade: gradeLetter};
+  }
+  return null;
+}
+
+/* ===================== FIXED-WIDTH FILE (SEAB "File A" style) ===================== */
+/* One student per line, no spacing between fields: 12-char index no, 66-char
+   name, 9-char NRIC/FIN, 6-char sex+status+level/class (e.g. "M1S36"), then a
+   space-separated list of subject-result codes, ending with a cohort/register
+   tag (e.g. "N1", "7"). Verified against real data: field boundaries are
+   fixed at columns 12 / 78 / 87 / 93. */
+function parseFixedWidthLine(line){
+  if(line.length < 94) return null;
+  const name = line.slice(12,78).trim();
+  const sexLevel = line.slice(87,93).trim();
+  const rest = line.slice(93).trim();
+  if(!name || !sexLevel || !rest) return null;
+  const lm = sexLevel.match(/^[MF]\d(S\d{2}|SEC\d)$/);
+  if(!lm) return null;
+  const tokens = rest.split(/\s+/);
+  if(tokens.length < 2) return null;
+  // last token is the cohort/register tag (e.g. "N1", "E1") — the clearest class
+  // signal available in this file; the S3x/S4x field earlier in the row does NOT
+  // reliably match the student's real class (verified against labelled data) so
+  // it is not used for grouping.
+  const className = tokens[tokens.length-1];
+  const codeTokens = tokens.slice(0, -1);
+  const records = [];
+  for(const tok of codeTokens){
+    const decoded = decodeSubjectCode(tok);
+    if(decoded){
+      records.push({ examName:'SEAB Export', class: className, teacher:'', index: line.slice(0,12),
+        student: name, subject: decoded.subject, mark:'', grade: decoded.grade,
+        rawCode: parseInt(tok.replace(/^\d/,'').replace(/[A-Z]$/,''),10), verified:false });
+    }
+  }
+  return records.length ? records : null;
+}
+
+function detectFixedWidth(lines){
+  const sample = lines.slice(0, Math.min(15, lines.length));
+  let hits = 0;
+  for(const l of sample) if(parseFixedWidthLine(l)) hits++;
+  return hits >= Math.ceil(sample.length * 0.6);
+}
+
+function parseFixedWidthFile(text){
+  const lines = text.split('\n').filter(l=>l.trim());
+  const records = []; let failed = 0;
+  for(const l of lines){
+    const recs = parseFixedWidthLine(l);
+    if(recs) records.push(...recs); else failed++;
+  }
+  return {records, failed, total: lines.length};
+}
+
+/* ===================== PARSERS ===================== */
+/* Shared core: given the raw tokens from either a SEAB text line or a row of
+   the pre-split spreadsheet format, builds one record. Used by both
+   parseSeabLine (text files) and parseXlsxRow (spreadsheet uploads) so both
+   paths decode identically and stay in sync. */
+function buildRecordFromTokens(idx, name, sexLevel, courseClass, subjGrade){
+  if(!idx || !name || !sexLevel || !courseClass || !subjGrade) return null;
+  const levelMatch = String(sexLevel).match(/^([MF])\d(?:SEC(\d)|S(\d))$/);
+  if(!levelMatch) return null;
+  const level = 'SEC' + (levelMatch[2] || levelMatch[3]);
+  const ccParts = String(courseClass).trim().split(/\s+/);
+  const classCode = ccParts[ccParts.length-1];
+  const levelDigit = level.replace('SEC','');
+  const className = /^\d+$/.test(classCode) ? levelDigit + '-' + classCode : levelDigit + classCode;
+  const base = { examName: 'SEAB Export', class: className, teacher: '', student: String(name).trim(),
+                 index: String(idx) };
+
+  const sg = String(subjGrade).match(/^([A-Za-z ]+?)\s*(\d+)([A-Z])?$/);
+  if(sg){
+    const subjRaw = sg[1].trim();
+    const subjMap = {TAMIL:'Tamil', CHINSE:'Chinese', MALAY:'Malay', ENGLSH:'English',
+                      HINDI:'Hindi', BURMSE:'Burmese', FRENCH:'French', PANJBI:'Panjabi'};
+    const subject = subjMap[subjRaw] || (subjRaw.charAt(0) + subjRaw.slice(1).toLowerCase());
+    return Object.assign({}, base, {subject, mark:'', grade: sg[3] || null,
+      rawCode: parseInt(sg[2],10), verified:true});
+  }
+
+  const numeric = String(subjGrade).match(/^(\d{6})$/);
+  if(numeric){
+    const decoded = decodeSubjectCode(numeric[1]);
+    if(!decoded) return null;
+    return Object.assign({}, base, {subject: decoded.subject, mark:'', grade: decoded.grade,
+      rawCode: parseInt(numeric[1],10), verified:false});
+  }
+  return null;
+}
+
+function parseSeabLine(line){
+  const tokens = line.trim().split(/\s{2,}/);
+  if(tokens.length < 5) return null;
+  return buildRecordFromTokens(tokens[0], tokens[1], tokens[3], tokens[4], tokens[tokens.length-1]);
+}
+
+/* Maps a header row to column indices by header text, so the parser adapts
+   to whichever columns are actually present (e.g. with or without a Raw
+   Code / Sex-Level column) rather than assuming a fixed layout. */
+function detectXlsxColumns(headerRow){
+  const norm = s => String(s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+  const map = {};
+  (headerRow||[]).forEach((h, i) => {
+    const n = norm(h);
+    if(['studentid','index','id'].includes(n)) map.index = i;
+    else if(n === 'name') map.name = i;
+    else if(n === 'sexlevel' || n === 'level') map.sexLevel = i;
+    else if(n === 'class') map.class = i;
+    else if(n === 'rawcode' || n === 'code') map.rawCode = i;
+    else if(n === 'subjectcode') map.subjectCode = i;
+    else if(n === 'subject') map.subject = i;
+    else if(n === 'grade') map.grade = i;
+    else if(n === 'oralgrade') map.oralGrade = i;
+  });
+  return map;
+}
+
+/* Parses one data row using a header-derived column map. Prefers the fully
+   verifiable path (Sex/Level + Raw Code, decoded with the same validated
+   logic as the .txt parser). Falls back to the sheet's own Subject/Grade
+   columns — used as-is, but always flagged unverified — when Raw Code isn't
+   available, since there is then no way to cross-check a multi-paper
+   subject's code against a false collision. */
+function parseXlsxRow(row, colMap){
+  colMap = colMap || DEFAULT_XLSX_COLMAP;
+  const get = key => colMap[key] !== undefined ? row[colMap[key]] : null;
+  const index = get('index'), name = get('name');
+  if(!index || !name) return null;
+  const sexLevel = get('sexLevel'), classRaw = get('class'), rawCode = get('rawCode');
+
+  if(sexLevel && rawCode){
+    const rec = buildRecordFromTokens(index, name, sexLevel, classRaw, rawCode);
+    if(rec) return rec;
+  }
+
+  const subjectText = get('subject');
+  if(!subjectText) return null;
+  const classNorm = classRaw ? String(classRaw).trim().replace(/\s+/g,'') : '';
+  const oralGrade = get('oralGrade');
+  const gradeRaw = get('grade');
+  let grade = null;
+  if(oralGrade && String(oralGrade).trim()){
+    const g = String(oralGrade).trim().toUpperCase();
+    grade = ORAL_ALIAS[g] || ORAL_ALIAS[g.slice(0,1)] || g.slice(0,1);
+  } else if(gradeRaw !== null && gradeRaw !== undefined && String(gradeRaw).trim() !== ''){
+    const g = String(gradeRaw).trim();
+    if(/^[1-9]$/.test(g)) grade = POINT_TO_GRADE[g];
+    else if(/^[A-Za-z]$/.test(g)) grade = g.toUpperCase();
+  }
+  return { examName:'SEAB Export', class: classNorm, teacher:'', student:String(name).trim(),
+    index:String(index), subject: String(subjectText).trim(), mark:'', grade, verified:false };
+}
+const DEFAULT_XLSX_COLMAP = {index:0,name:1,sexLevel:2,class:3,rawCode:4,subjectCode:5,subject:6,grade:7,oralGrade:8};
+
+function detectSeab(lines){
+  const sample = lines.slice(0, Math.min(15, lines.length));
+  let hits = 0;
+  for(const l of sample) if(parseSeabLine(l)) hits++;
+  return hits >= Math.ceil(sample.length * 0.6);
+}
+
+function parseSeabFile(text){
+  const lines = text.split('\n').filter(l=>l.trim());
+  const records = []; let failed = 0;
+  for(const l of lines){
+    const rec = parseSeabLine(l);
+    if(rec) records.push(rec); else failed++;
+  }
+  return {records, failed, total: lines.length};
+}
+
+function normalizeHeader(h){ return String(h||'').trim().toLowerCase().replace(/[^a-z]/g,''); }
+
+function parseCsvFile(text){
+  const parsed = Papa.parse(text.trim(), {skipEmptyLines:true});
+  const rows = parsed.data;
+  if(rows.length < 2) return {records:[], failed:0, total:0};
+  const header = rows[0].map(normalizeHeader);
+  const col = (names) => {
+    for(const n of names){ const i = header.indexOf(n); if(i>=0) return i; }
+    return -1;
+  };
+  const c = {
+    exam: col(['examname','exam']),
+    cls: col(['class']),
+    subj: col(['subject']),
+    teacher: col(['teacher']),
+    student: col(['studentname','student','name']),
+    mark: col(['mark','marks','score']),
+    grade: col(['gradeifnomark','grade']),
+  };
+  const records = []; let failed = 0;
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r.every(x=>!x || !String(x).trim())) continue;
+    const student = c.student>=0 ? r[c.student] : '';
+    const subject = c.subj>=0 ? r[c.subj] : '';
+    if(!student || !subject){ failed++; continue; }
+    records.push({
+      examName: c.exam>=0 ? (r[c.exam]||'') : '',
+      class: c.cls>=0 ? (r[c.cls]||'') : '',
+      subject: subject,
+      teacher: c.teacher>=0 ? (r[c.teacher]||'') : '',
+      student: student,
+      mark: c.mark>=0 ? r[c.mark] : '',
+      grade: c.grade>=0 ? r[c.grade] : '',
+      verified: true,
+    });
+  }
+  return {records, failed, total: rows.length-1};
+}
+
+/* ===================== LEGEND RENDER ===================== */
+(function renderLegend(){
+  const rows = Object.entries(SEAB_SUBJECT_CODES).sort((a,b)=>a[0].localeCompare(b[0]));
+  let html = '<tr><th>Code</th><th class="left">Subject</th></tr>';
+  rows.forEach(([code, name])=>{
+    html += `<tr><td>${code}</td><td class="left">${name}</td></tr>`;
+  });
+  document.getElementById('legendTable').innerHTML = html;
+})();
+
+/* ===================== STATE ===================== */
+let allRecords = [];
+let fileNames = [];
+
+/* ===================== FILE HANDLING ===================== */
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const errorBanner = document.getElementById('errorBanner');
+const infoBanner = document.getElementById('infoBanner');
+const filePills = document.getElementById('filePills');
+
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e=>handleFiles(e.target.files));
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  allRecords = []; fileNames = []; filePills.innerHTML=''; hideBanners();
+  filterState = { classes: null, subjects: null, grades: null };
+  document.getElementById('classFilterOptions').innerHTML = '';
+  document.getElementById('subjectFilterOptions').innerHTML = '';
+  document.getElementById('gradeFilterOptions').innerHTML = '';
+  document.getElementById('filterCount').textContent = '';
+  renderAll();
+  document.getElementById('results').style.display='none';
+});
+
+function hideBanners(){
+  errorBanner.style.display='none'; errorBanner.textContent=''; errorBanner.classList.remove('error');
+  infoBanner.style.display='none'; infoBanner.textContent=''; infoBanner.classList.remove('info');
+}
+
+function handleFiles(fileList){
+  hideBanners();
+  const files = Array.from(fileList);
+  if(files.length === 0) return;
+  let pending = files.length;
+  files.forEach(file=>{
+    const isXlsx = /\.xlsx?$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        if(isXlsx) processXlsxFile(file.name, e.target.result);
+        else processFileText(file.name, e.target.result);
+      } catch(err){
+        showError(`Something went wrong reading "${file.name}": ${err.message}`);
+        console.error(err);
+      }
+      pending--;
+      if(pending===0){ afterAllFilesLoaded(); }
+    };
+    reader.onerror = ()=>{ pending--; showError('Could not read file: '+file.name); if(pending===0){ afterAllFilesLoaded(); } };
+    if(isXlsx) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  });
+}
+
+function processXlsxFile(name, arrayBuffer){
+  const wb = XLSX.read(arrayBuffer, {type:'array'});
+  const sheetName = wb.SheetNames[0];
+  const sheet = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:true});
+  if(rows.length < 2){
+    showError(`"${name}" doesn't have any data rows.`);
+    return;
+  }
+  const colMap = detectXlsxColumns(rows[0]);
+  if(colMap.index === undefined || colMap.name === undefined ||
+     (colMap.subject === undefined && colMap.rawCode === undefined)){
+    showError(`Couldn't recognise the columns in "${name}". Expecting at least a Student ID/Index, Name, and either a Raw Code or Subject column.`);
+    return;
+  }
+  const hasRawCode = colMap.sexLevel !== undefined && colMap.rawCode !== undefined;
+
+  let records = [], failed = 0;
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || !r[colMap.index]) continue;
+    const rec = parseXlsxRow(r, colMap);
+    if(rec) records.push(rec); else failed++;
+  }
+  if(records.length === 0){
+    showError(`No usable rows found in "${name}".`);
+    return;
+  }
+  allRecords = allRecords.concat(records);
+  fileNames.push(name);
+  if(hasRawCode){
+    infoNote(`"${name}" recognised as a decoded SEAB spreadsheet (${records.length} record(s) read and cross-checked from Raw Code).`);
+  } else {
+    infoNote(`"${name}" recognised as a decoded SEAB spreadsheet (${records.length} record(s)). No Raw Code / Sex-Level column was found, so subjects are taken directly from the Subject column and marked unverified — they cannot be cross-checked for the multi-paper-subject collision issue without it.`);
+  }
+  if(failed > 0) infoNote(`${failed} row(s) in "${name}" didn't match the expected pattern and were skipped.`);
+}
+
+function processFileText(name, text){
+  let result;
+  const lines = text.split('\n').filter(l=>l.trim());
+  if(detectSeab(lines)){
+    result = parseSeabFile(text);
+    infoNote(`"${name}" recognised as a SEAB/MOE labelled export.`);
+  } else if(detectFixedWidth(lines)){
+    result = parseFixedWidthFile(text);
+    infoNote(`"${name}" recognised as a SEAB/MOE fixed-width export (numeric subject codes).`);
+  } else if(text.includes(',')){
+    result = parseCsvFile(text);
+    infoNote(`"${name}" read as CSV.`);
+  } else {
+    showError(`Couldn't recognise the format of "${name}". Expecting a SEAB export or a CSV with headers like Class, Subject, Student Name, Mark/Grade.`);
+    return;
+  }
+  if(result.records.length === 0){
+    showError(`No usable rows found in "${name}". Check it matches the expected format.`);
+    return;
+  }
+  allRecords = allRecords.concat(result.records);
+  fileNames.push(name);
+  if(result.failed > 0){
+    infoNote(`${result.failed} line(s) in "${name}" didn't match the expected pattern and were skipped.`);
+  }
+}
+
+function infoNote(msg){
+  infoBanner.classList.add('info');
+  infoBanner.style.display='block';
+  infoBanner.textContent = infoBanner.textContent ? infoBanner.textContent + '  ' + msg : msg;
+}
+function showError(msg){
+  errorBanner.classList.add('error');
+  errorBanner.style.display='block';
+  errorBanner.textContent = errorBanner.textContent ? errorBanner.textContent + '  ' + msg : msg;
+}
+
+function afterAllFilesLoaded(){
+  filePills.innerHTML = fileNames.map(n=>`<span class="file-pill">${escapeHtml(n)}</span>`).join(' ');
+  crossReferenceRecords();
+  reconcileClasses();
+  if(allRecords.length){
+    document.getElementById('results').style.display='block';
+    populateFilters();
+    renderAll();
+  } else {
+    document.getElementById('results').style.display='none';
+    if(!errorBanner.textContent){
+      showError('No records could be parsed from the file(s) you uploaded. See the message above (if any), or double-check the file matches the expected SEAB export or CSV format.');
+    }
+  }
+}
+
+/* Cross-reference unverified numeric-code decodes (File A style) against any
+   verified, explicitly-labelled records (File B style) for the same student
+   and the same raw code. Where a labelled record exists, it overrides the
+   numeric guess — this is the fix for the collision problem where a
+   multi-paper subject's later paper codes can numerically match an unrelated
+   subject's real SEAB code. Anything left unverified is flagged in the UI. */
+/* Reconciles class labels across files. File A's bare class tag (e.g. "N1")
+   is ambiguous — the same tag exists at both Sec 4 and Sec 5 — so wherever a
+   student also has a properly level-prefixed class from File B/CSV (e.g.
+   "5N1"), that is treated as authoritative and applied to ALL of that
+   student's records, including their File-A-only subjects (Math, Science...).
+   This must run before crossReferenceRecords/grouping. */
+function reconcileClasses(){
+  const classLookup = {};
+  allRecords.forEach(r=>{
+    if(r.index !== undefined && /^[345]/.test(String(r.class||''))){
+      classLookup[r.index] = r.class;
+    }
+  });
+  allRecords.forEach(r=>{
+    if(r.index !== undefined && classLookup[r.index]){
+      r.class = classLookup[r.index];
+    }
+  });
+}
+
+function crossReferenceRecords(){
+  const verifiedMap = {};
+  allRecords.forEach(r=>{
+    if(r.verified && r.index !== undefined && r.rawCode !== undefined){
+      verifiedMap[r.index + '|' + r.rawCode] = true;
+    }
+  });
+  // Drop any unverified (numeric-code-only) record that has a matching
+  // verified (labelled) twin elsewhere in the dataset — otherwise the same
+  // result gets counted twice when both files are uploaded together.
+  allRecords = allRecords.filter(r=>{
+    if(r.verified) return true;
+    if(r.index !== undefined && r.rawCode !== undefined){
+      const key = r.index + '|' + r.rawCode;
+      if(verifiedMap[key]){ return false; } // duplicate of a verified record — drop
+    }
+    return true;
+  });
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ===================== ANALYSIS ===================== */
+function buildAnalysis(records){
+  // enrich
+  const enriched = records.map(r=>{
+    const c = classify(r);
+    return Object.assign({}, r, c);
+  });
+  // group by subject -> class
+  const subjects = {};
+  for(const r of enriched){
+    const subj = r.subject || '(Unknown subject)';
+    const cls = r.class || '(Unknown class)';
+    if(!subjects[subj]) subjects[subj] = {classes:{}, scale:null};
+    if(!subjects[subj].classes[cls]) subjects[subj].classes[cls] = {records:[]};
+    subjects[subj].classes[cls].records.push(r);
+  }
+  // determine dominant scale per subject
+  for(const subj in subjects){
+    const counts = {standard:0, oral:0, other:0};
+    for(const cls in subjects[subj].classes){
+      for(const r of subjects[subj].classes[cls].records){
+        counts[r.scale] = (counts[r.scale]||0) + 1;
+      }
+    }
+    subjects[subj].scale = Object.keys(counts).reduce((a,b)=>counts[a]>=counts[b]?a:b);
+  }
+  return subjects;
+}
+
+function statsForRecords(recsAll, scale){
+  const order = scale==='standard' ? STANDARD_ORDER : ORAL_ORDER;
+  const counts = {}; order.forEach(g=>counts[g]=0);
+  const marks = [];
+  let pending = 0;
+  const recs = [];
+  for(const r of recsAll){
+    if(r.gradeLetter === null || r.gradeLetter === undefined){ pending++; continue; }
+    recs.push(r);
+    if(counts.hasOwnProperty(r.gradeLetter)) counts[r.gradeLetter]++;
+    if(r.mark !== '' && r.mark !== null && r.mark !== undefined && !isNaN(r.mark)) marks.push(Number(r.mark));
+  }
+  const no = recs.length;
+  let distNo, passNo, failNo;
+  if(scale==='standard'){
+    distNo = counts.A1 + counts.A2;
+    passNo = counts.A1+counts.A2+counts.B3+counts.B4+counts.C5+counts.C6;
+    failNo = counts.D7+counts.E8+counts.F9;
+  } else {
+    distNo = counts.D || 0;
+    passNo = (counts.D||0)+(counts.M||0)+(counts.P||0);
+    failNo = counts.U || 0;
+  }
+  const avg = marks.length ? marks.reduce((a,b)=>a+b,0)/marks.length : null;
+  const max = marks.length ? Math.max(...marks) : null;
+  const min = marks.length ? Math.min(...marks) : null;
+  let msg = null;
+  if(scale==='standard' && no>0){
+    let sum=0;
+    STANDARD_BANDS.forEach(b=>{ sum += counts[b.grade]*b.points; });
+    msg = sum/no;
+  }
+  return {order, counts, no, distNo, passNo, failNo, avg, max, min, msg, pending};
+}
+
+const pct = v => v===null||v===undefined||isNaN(v) ? '—' : (v*100).toFixed(1)+'%';
+const num = v => v===null||v===undefined||isNaN(v) ? '—' : (Math.round(v*10)/10).toString();
+
+/* ===================== LEVEL GROUPING ===================== */
+/* Splits records into separate cohorts (e.g. Secondary 4 vs Secondary 5 N1)
+   so each gets its own Subject Analysis + Dashboard, never mixed together. */
+function levelGroupOf(cls){
+  const c = String(cls||'').trim();
+  // A level digit followed by something else (e.g. "41","4E1","5N1") is a
+  // reliable, explicit level marker — use it as-is.
+  if(c.length>=2 && c[0]==='5') return { key:'sec5_'+c, label: 'Secondary 5 (' + c + ')' };
+  if(c.length>=2 && c[0]==='4') return { key:'sec4', label:'Secondary 4' };
+  if(c.length>=2 && c[0]==='3') return { key:'sec3', label:'Secondary 3' };
+  // A bare tag ("1".."7", "N1", etc.) carries no level marker at all. Files
+  // like this are, in every case checked so far, entirely Secondary 4 — but
+  // that is an assumption, not something the file itself confirms, so it is
+  // labelled as such rather than silently presented as fact.
+  return { key:'sec4_assumed', label:'Secondary 4 (assumed — no level marker in file, please confirm)' };
+}
+const LEVEL_SORT = k => k==='sec3' ? 0 : (k==='sec4' || k==='sec4_assumed') ? 1 : k.startsWith('sec5') ? 2 : 3;
+
+function groupRecordsByLevel(records){
+  const groups = {};
+  records.forEach(r=>{
+    const g = levelGroupOf(r.class);
+    if(!groups[g.key]) groups[g.key] = { label:g.label, records:[] };
+    groups[g.key].records.push(r);
+  });
+  return Object.keys(groups).sort((a,b)=>LEVEL_SORT(a)-LEVEL_SORT(b) || a.localeCompare(b)).map(k=>groups[k]);
+}
+
+/* ===================== FILTERS ===================== */
+let filterState = { classes: null, subjects: null, grades: null }; // null = not yet populated
+
+function recordGradeLabel(r){
+  const c = classify(r);
+  return c.gradeLetter ? c.gradeLetter : 'Pending';
+}
+
+function getFilteredRecords(){
+  return allRecords.filter(r=>{
+    if(filterState.classes && !filterState.classes.has(r.class)) return false;
+    if(filterState.subjects && !filterState.subjects.has(r.subject)) return false;
+    if(filterState.grades && !filterState.grades.has(recordGradeLabel(r))) return false;
+    return true;
+  });
+}
+
+const GRADE_SORT_ORDER = ['A1','A2','B3','B4','C5','C6','D7','E8','F9','D','M','P','U','Pending'];
+function sortGrades(values){
+  return values.sort((a,b)=>{
+    const ia = GRADE_SORT_ORDER.indexOf(a), ib = GRADE_SORT_ORDER.indexOf(b);
+    if(ia===-1 && ib===-1) return a.localeCompare(b);
+    if(ia===-1) return 1;
+    if(ib===-1) return -1;
+    return ia-ib;
+  });
+}
+
+function populateFilters(){
+  const classes = [...new Set(allRecords.map(r=>r.class))].sort();
+  const subjects = [...new Set(allRecords.map(r=>r.subject))].sort();
+  const grades = sortGrades([...new Set(allRecords.map(recordGradeLabel))]);
+  filterState.classes = new Set(classes);
+  filterState.subjects = new Set(subjects);
+  filterState.grades = new Set(grades);
+
+  const buildOptions = (containerId, values, key) => {
+    const container = document.getElementById(containerId);
+    container.innerHTML = values.map(v => {
+      const id = key + '_' + btoa(unescape(encodeURIComponent(v))).replace(/[^a-zA-Z0-9]/g,'');
+      return `<label class="filter-option" for="${id}">
+        <input type="checkbox" id="${id}" checked data-key="${key}" data-value="${escapeHtml(v)}">
+        <span>${escapeHtml(v)}</span>
+      </label>`;
+    }).join('');
+    container.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+      cb.addEventListener('change', onFilterChange);
+    });
+  };
+  buildOptions('classFilterOptions', classes, 'classes');
+  buildOptions('subjectFilterOptions', subjects, 'subjects');
+  buildOptions('gradeFilterOptions', grades, 'grades');
+  updateFilterCount();
+}
+
+function onFilterChange(e){
+  const key = e.target.getAttribute('data-key');
+  const value = e.target.getAttribute('data-value');
+  if(e.target.checked) filterState[key].add(value);
+  else filterState[key].delete(value);
+  updateFilterCount();
+  renderAll();
+}
+
+function updateFilterCount(){
+  const totalClasses = document.querySelectorAll('#classFilterOptions input').length;
+  const totalSubjects = document.querySelectorAll('#subjectFilterOptions input').length;
+  const totalGrades = document.querySelectorAll('#gradeFilterOptions input').length;
+  const filtered = getFilteredRecords();
+  document.getElementById('filterCount').textContent =
+    `${filterState.classes.size}/${totalClasses} classes · ${filterState.subjects.size}/${totalSubjects} subjects · ${filterState.grades.size}/${totalGrades} grades · ${filtered.length} of ${allRecords.length} records shown`;
+}
+
+function setAllFilter(key, checked){
+  const containerId = key === 'classes' ? 'classFilterOptions' : key === 'subjects' ? 'subjectFilterOptions' : 'gradeFilterOptions';
+  const container = document.getElementById(containerId);
+  container.querySelectorAll('input[type=checkbox]').forEach(cb=>{ cb.checked = checked; });
+  const values = key==='classes' ? [...new Set(allRecords.map(r=>r.class))]
+               : key==='subjects' ? [...new Set(allRecords.map(r=>r.subject))]
+               : [...new Set(allRecords.map(recordGradeLabel))];
+  filterState[key] = checked ? new Set(values) : new Set();
+  updateFilterCount();
+  renderAll();
+}
+
+document.getElementById('classAllBtn').addEventListener('click', ()=>{
+  const allChecked = [...document.querySelectorAll('#classFilterOptions input')].every(cb=>cb.checked);
+  setAllFilter('classes', !allChecked);
+});
+document.getElementById('subjectAllBtn').addEventListener('click', ()=>{
+  const allChecked = [...document.querySelectorAll('#subjectFilterOptions input')].every(cb=>cb.checked);
+  setAllFilter('subjects', !allChecked);
+});
+document.getElementById('gradeAllBtn').addEventListener('click', ()=>{
+  const allChecked = [...document.querySelectorAll('#gradeFilterOptions input')].every(cb=>cb.checked);
+  setAllFilter('grades', !allChecked);
+});
+document.getElementById('filterResetBtn').addEventListener('click', ()=>{
+  const classes = [...new Set(allRecords.map(r=>r.class))];
+  const subjects = [...new Set(allRecords.map(r=>r.subject))];
+  const grades = [...new Set(allRecords.map(recordGradeLabel))];
+  filterState.classes = new Set(classes);
+  filterState.subjects = new Set(subjects);
+  filterState.grades = new Set(grades);
+  document.querySelectorAll('#classFilterOptions input, #subjectFilterOptions input, #gradeFilterOptions input').forEach(cb=>{ cb.checked = true; });
+  updateFilterCount();
+  renderAll();
+});
+
+/* ===================== RENDER ===================== */
+let chartInstances = [];
+function destroyCharts(){ chartInstances.forEach(c=>c.destroy()); chartInstances=[]; }
+
+function renderAll(){
+  destroyCharts();
+  if(!allRecords.length){
+    document.getElementById('previewTable').innerHTML='';
+    document.getElementById('subjectTables').innerHTML='';
+    document.getElementById('kpiGrid').innerHTML='';
+    document.getElementById('chartsGrid').innerHTML='';
+    return;
+  }
+  const records = getFilteredRecords();
+  renderPreview(records);
+  if(!records.length){
+    document.getElementById('subjectTables').innerHTML = '<p style="color:var(--muted); font-size:13px;">No records match the current filters.</p>';
+    document.getElementById('kpiGrid').innerHTML = '';
+    document.getElementById('chartsGrid').innerHTML = '';
+    document.getElementById('subjectCount').textContent = '0 cohort(s)';
+    return;
+  }
+  const levelGroups = groupRecordsByLevel(records);
+  const subjTableContainer = document.getElementById('subjectTables');
+  const kpiContainer = document.getElementById('kpiGrid');
+  const chartsContainer = document.getElementById('chartsGrid');
+  subjTableContainer.innerHTML = '';
+  kpiContainer.innerHTML = '';
+  chartsContainer.innerHTML = '';
+  document.getElementById('subjectCount').textContent = levelGroups.length + ' cohort(s)';
+
+  levelGroups.forEach((grp, gi)=>{
+    const subjects = buildAnalysis(grp.records);
+
+    const heading = document.createElement('h3');
+    heading.textContent = grp.label;
+    heading.style.cssText = 'font-size:19px; color:var(--gold); margin:' + (gi===0?'0':'34px') + ' 0 12px; padding-top:' + (gi===0?'0':'20px') + '; border-top:' + (gi===0?'none':'1px solid var(--line)') + ';';
+    subjTableContainer.appendChild(heading);
+    const tablesDiv = document.createElement('div');
+    subjTableContainer.appendChild(tablesDiv);
+    renderSubjectTables(subjects, tablesDiv, gi);
+
+    const dashHeading = document.createElement('h3');
+    dashHeading.textContent = grp.label + ' — Dashboard';
+    dashHeading.style.cssText = 'font-size:16px; color:var(--navy); margin:' + (gi===0?'0':'34px') + ' 0 10px;';
+    kpiContainer.appendChild(dashHeading);
+    const kpiDiv = document.createElement('div');
+    kpiDiv.className = 'kpi-grid';
+    kpiDiv.style.marginBottom = '10px';
+    kpiContainer.appendChild(kpiDiv);
+    const chartsDiv = document.createElement('div');
+    chartsDiv.className = 'charts';
+    chartsDiv.style.marginBottom = '10px';
+    chartsContainer.appendChild(chartsDiv);
+    renderDashboard(subjects, kpiDiv, chartsDiv, gi, grp.label);
+  });
+}
+
+function renderPreview(records){
+  const rows = records.slice(0,12);
+  document.getElementById('previewCount').textContent = records.length + ' of ' + allRecords.length + ' record(s) shown (after filters)';
+  let html = '<tr><th>Student</th><th>Class</th><th>Subject</th><th>Teacher</th><th>Mark</th><th>Grade</th><th>Confidence</th></tr>';
+  rows.forEach(r=>{
+    const c = classify(r);
+    const conf = r.verified ? (r.crossReferenced ? 'Verified (cross-ref)' : 'Verified') : 'Unverified — check';
+    const confColor = r.verified ? 'var(--good)' : 'var(--warn)';
+    html += `<tr><td class="left">${escapeHtml(r.student)}</td><td>${escapeHtml(r.class)}</td><td>${escapeHtml(r.subject)}</td><td>${escapeHtml(r.teacher||'—')}</td><td>${r.mark!==''&&r.mark!==undefined?escapeHtml(String(r.mark)):'—'}</td><td>${c.gradeLetter?escapeHtml(c.gradeLetter):'—'}</td><td style="color:${confColor}; font-weight:600;">${conf}</td></tr>`;
+  });
+  document.getElementById('previewTable').innerHTML = html;
+}
+
+function renderSubjectTables(subjects, container, gi){
+  const subjNames = Object.keys(subjects).sort();
+  let out = '';
+  window._subjectSummaries = window._subjectSummaries || {};
+  window._subjectSummaries[gi] = [];
+  subjNames.forEach(subj=>{
+    const data = subjects[subj];
+    const scale = data.scale;
+    const order = scale==='standard' ? STANDARD_ORDER : (scale==='oral'? ORAL_ORDER : []);
+    const classNames = Object.keys(data.classes).sort();
+    let allRecs = [];
+    let head = '<tr><th class="left">Class</th><th>No.</th>';
+    order.forEach(g=> head += `<th>${scale==='oral'?ORAL_LABEL[g]:g}</th>`);
+    head += '<th>Dist. No</th><th>Dist. %</th><th>Pass No</th><th>Pass %</th><th>Fail No</th><th>Fail %</th><th>Average</th><th>Max</th><th>Min</th>';
+    if(scale==='standard') head += '<th>MSG</th>';
+    head += '<th>Pending</th></tr>';
+
+    let body = '';
+    classNames.forEach(cls=>{
+      const recs = data.classes[cls].records;
+      allRecs = allRecs.concat(recs);
+      const s = statsForRecords(recs, scale);
+      body += `<tr><td class="left">${escapeHtml(cls)}</td><td>${s.no}</td>`;
+      order.forEach(g=> body += `<td>${s.counts[g]}</td>`);
+      body += `<td>${s.distNo}</td><td>${pct(s.no?s.distNo/s.no:0)}</td><td>${s.passNo}</td><td>${pct(s.no?s.passNo/s.no:0)}</td><td>${s.failNo}</td><td>${pct(s.no?s.failNo/s.no:0)}</td><td>${num(s.avg)}</td><td>${num(s.max)}</td><td>${num(s.min)}</td>`;
+      if(scale==='standard') body += `<td>${num(s.msg)}</td>`;
+      body += `<td>${s.pending||0}</td></tr>`;
+    });
+
+    const summary = statsForRecords(allRecs, scale);
+    let summaryRow = `<tr class="summary"><td class="left">Summary</td><td>${summary.no}</td>`;
+    order.forEach(g=> summaryRow += `<td>${summary.counts[g]}</td>`);
+    summaryRow += `<td>${summary.distNo}</td><td>${pct(summary.no?summary.distNo/summary.no:0)}</td><td>${summary.passNo}</td><td>${pct(summary.no?summary.passNo/summary.no:0)}</td><td>${summary.failNo}</td><td>${pct(summary.no?summary.failNo/summary.no:0)}</td><td>${num(summary.avg)}</td><td>${num(summary.max)}</td><td>${num(summary.min)}</td>`;
+    if(scale==='standard') summaryRow += `<td>${num(summary.msg)}</td>`;
+    summaryRow += `<td>${summary.pending||0}</td></tr>`;
+
+    window._subjectSummaries[gi].push({subject:subj, scale, summary});
+
+    const unverifiedCount = allRecs.filter(r=>!r.verified).length;
+    const confBadge = unverifiedCount>0
+      ? `<span style="color:#FBEAE4;">${unverifiedCount} unverified</span>`
+      : `<span style="opacity:.8;">all verified</span>`;
+
+    out += `<div class="subject-block">
+      <div class="subject-block-title"><span>${escapeHtml(subj)}</span><span class="scale">${scale==='standard'?'A1–F9 scale':scale==='oral'?'Distinction / Merit / Pass / Ungraded':'grade scale unrecognised'} · ${confBadge}</span></div>
+      <div style="overflow-x:auto;"><table>${head}${body}${summaryRow}</table></div>
+    </div>`;
+  });
+  container.innerHTML = out || '<p style="color:var(--muted); font-size:13px;">No subjects found for this cohort.</p>';
+}
+
+function renderDashboard(subjects, kpiDiv, chartsDiv, gi, cohortLabel){
+  const summaries = (window._subjectSummaries && window._subjectSummaries[gi]) || [];
+  const totalStudents = summaries.reduce((a,s)=>a+s.summary.no,0);
+  const totalPass = summaries.reduce((a,s)=>a+s.summary.passNo,0);
+  const totalDist = summaries.reduce((a,s)=>a+s.summary.distNo,0);
+  const withRate = summaries.filter(s=>s.summary.no>0).map(s=>({name:s.subject, rate: s.summary.passNo/s.summary.no}));
+  let best = '—', worst = '—';
+  if(withRate.length){
+    best = withRate.reduce((a,b)=> b.rate>a.rate?b:a).name;
+    worst = withRate.reduce((a,b)=> b.rate<a.rate?b:a).name;
+  }
+  const kpis = [
+    {label:'Total Students Analysed', value: totalStudents},
+    {label:'Overall Pass Rate', value: pct(totalStudents? totalPass/totalStudents:0)},
+    {label:'Overall Distinction Rate', value: pct(totalStudents? totalDist/totalStudents:0)},
+    {label:'Best Performing Subject', value: best},
+    {label:'Subject Needing Attention', value: worst},
+  ];
+  kpiDiv.innerHTML = kpis.map(k=>
+    `<div class="kpi"><div class="label">${k.label}</div><div class="value">${escapeHtml(String(k.value))}</div></div>`
+  ).join('');
+
+  if(!summaries.length){
+    chartsDiv.innerHTML = '';
+    return;
+  }
+
+  // Charts
+  const rateCanvasId = 'chartRates_' + gi;
+  const avgCanvasId = 'chartAvg_' + gi;
+  chartsDiv.innerHTML = `
+    <div class="chart-card"><h4>Pass Rate vs Distinction Rate by Subject — ${escapeHtml(cohortLabel)}</h4><canvas id="${rateCanvasId}"></canvas></div>
+    <div class="chart-card"><h4>Average Mark by Subject — ${escapeHtml(cohortLabel)}</h4><canvas id="${avgCanvasId}"></canvas></div>
+  `;
+  const labels = summaries.map(s=>s.subject);
+  const passRates = summaries.map(s=> s.summary.no? +(s.summary.passNo/s.summary.no*100).toFixed(1) : 0);
+  const distRates = summaries.map(s=> s.summary.no? +(s.summary.distNo/s.summary.no*100).toFixed(1) : 0);
+  const avgs = summaries.map(s=> s.summary.avg!==null ? +s.summary.avg.toFixed(1) : null);
+
+  chartInstances.push(new Chart(document.getElementById(rateCanvasId), {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Pass %', data:passRates, backgroundColor:'#14304D'},
+      {label:'Distinction %', data:distRates, backgroundColor:'#C9971F'},
+    ]},
+    options:{ responsive:true, scales:{ y:{ beginAtZero:true, max:100 } } }
+  }));
+  chartInstances.push(new Chart(document.getElementById(avgCanvasId), {
+    type:'bar',
+    data:{ labels, datasets:[{label:'Average Mark', data:avgs, backgroundColor:'#294B70'}]},
+    options:{ responsive:true, scales:{ y:{ beginAtZero:true, max:100 } } }
+  }));
+}
+
+/* ===================== EXPORT ===================== */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!allRecords.length) return;
+  const records = getFilteredRecords();
+  if(!records.length) return;
+  const wb = XLSX.utils.book_new();
+  const summariesByGroup = window._subjectSummaries || {};
+  const levelGroups = groupRecordsByLevel(records);
+  const rows = [['Cohort','Subject','Scale','No.','Dist No','Dist %','Pass No','Pass %','Fail No','Fail %','Average','Max','Min','MSG']];
+  levelGroups.forEach((grp, gi)=>{
+    (summariesByGroup[gi] || []).forEach(s=>{
+      const sm = s.summary;
+      rows.push([grp.label, s.subject, s.scale, sm.no, sm.distNo, sm.no?+(sm.distNo/sm.no*100).toFixed(1):0,
+        sm.passNo, sm.no?+(sm.passNo/sm.no*100).toFixed(1):0, sm.failNo, sm.no?+(sm.failNo/sm.no*100).toFixed(1):0,
+        sm.avg!==null?+sm.avg.toFixed(1):'', sm.max, sm.min, sm.msg!==null?+sm.msg.toFixed(2):'']);
+    });
+  });
+  const summarySheet = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Subject Summary');
+
+  const rawRows = [['Exam Name','Class','Subject','Teacher','Student Name','Mark','Grade']];
+  records.forEach(r=>{
+    const c = classify(r);
+    rawRows.push([r.examName||'', r.class||'', r.subject||'', r.teacher||'', r.student||'', r.mark||'', c.gradeLetter||'']);
+  });
+  const rawSheet = XLSX.utils.aoa_to_sheet(rawRows);
+  XLSX.utils.book_append_sheet(wb, rawSheet, 'Raw Records');
+
+  XLSX.writeFile(wb, 'subject_analysis_export.xlsx');
+});
+</script>
+</body>
+</html>
