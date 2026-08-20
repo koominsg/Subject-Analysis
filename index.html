@@ -328,7 +328,8 @@ const STANDARD_BANDS = [
 const STANDARD_ORDER = STANDARD_BANDS.map(b=>b.grade);
 const ORAL_ORDER = ['D','M','P','U'];
 const ORAL_LABEL = {D:'Distinction', M:'Merit', P:'Pass', U:'Ungraded'};
-const ORAL_ALIAS = {DI:'D', ME:'M', PA:'P', UG:'U', D:'D', M:'M', P:'P', U:'U'};
+const ORAL_ALIAS = {DI:'D', ME:'M', PA:'P', UG:'U', D:'D', M:'M', P:'P', U:'U',
+  DISTINCTION:'D', MERIT:'M', PASS:'P', UNGRADED:'U'};
 
 const POINT_TO_GRADE = {}; STANDARD_BANDS.forEach(b=>POINT_TO_GRADE[b.points]=b.grade);
 
@@ -480,6 +481,12 @@ function parseSeabLine(line){
 /* Maps a header row to column indices by header text, so the parser adapts
    to whichever columns are actually present (e.g. with or without a Raw
    Code / Sex-Level column) rather than assuming a fixed layout. */
+function titleCaseWords(s){
+  return String(s).trim().split(/\s+/).map(w =>
+    w.length<=1 ? w.toUpperCase() : w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()
+  ).join(' ');
+}
+
 function detectXlsxColumns(headerRow){
   const norm = s => String(s||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
   const map = {};
@@ -526,7 +533,7 @@ function parseXlsxRow(row, colMap){
   const oralGrade = get('oralGrade');
   const gradeRaw = get('grade');
   const base = { examName:'SEAB Export', class: classNorm, teacher:'', student:String(name).trim(),
-    index:String(index), subject: String(subjectText).trim(), mark:'' };
+    index:String(index), subject: titleCaseWords(subjectText), mark:'' };
 
   // Grade and Oral Grade can BOTH be genuine, independent results for the
   // same subject (e.g. Chinese's written paper AND its oral component) —
@@ -534,9 +541,11 @@ function parseXlsxRow(row, colMap){
   // present, rather than assuming Oral Grade always wins.
   const records = [];
   if(gradeRaw !== null && gradeRaw !== undefined && String(gradeRaw).trim() !== ''){
-    const g = String(gradeRaw).trim();
+    const g = String(gradeRaw).trim().toUpperCase();
     if(/^[1-9]$/.test(g)) records.push(Object.assign({}, base, {grade: POINT_TO_GRADE[g], verified:false}));
-    else if(/^[A-Za-z]$/.test(g)) records.push(Object.assign({}, base, {grade: g.toUpperCase(), verified:false}));
+    else if(STANDARD_ORDER.includes(g)) records.push(Object.assign({}, base, {grade: g, verified:false}));
+    else if(ORAL_ALIAS[g]) records.push(Object.assign({}, base, {grade: ORAL_ALIAS[g], verified:false}));
+    else if(/^[A-Za-z]$/.test(g)) records.push(Object.assign({}, base, {grade: g, verified:false}));
   }
   if(oralGrade && String(oralGrade).trim()){
     const g = String(oralGrade).trim().toUpperCase();
@@ -823,10 +832,24 @@ function buildAnalysis(records){
     const c = classify(r);
     return Object.assign({}, r, c);
   });
+  // Determine which subjects have BOTH a standard-scale and an oral-scale
+  // record (e.g. Chinese's written paper vs its oral component) — those get
+  // split into two separate subjects ("X" and "X (Oral)") so a class's MSG
+  // and grade distribution isn't computed over a mix of two different scales.
+  // A subject that's ONLY ever oral-scale (e.g. most Malay/Tamil results)
+  // stays under its own name with no suffix.
+  const scalesBySubject = {};
+  enriched.forEach(r=>{
+    const subj = r.subject || '(Unknown subject)';
+    (scalesBySubject[subj] = scalesBySubject[subj] || new Set()).add(r.scale);
+  });
+  const mixedSubjects = new Set(Object.keys(scalesBySubject).filter(s => scalesBySubject[s].has('standard') && scalesBySubject[s].has('oral')));
+
   // group by subject -> class
   const subjects = {};
   for(const r of enriched){
-    const subj = r.subject || '(Unknown subject)';
+    let subj = r.subject || '(Unknown subject)';
+    if(mixedSubjects.has(subj) && r.scale === 'oral') subj = subj + ' (Oral)';
     const cls = r.class || '(Unknown class)';
     if(!subjects[subj]) subjects[subj] = {classes:{}, scale:null};
     if(!subjects[subj].classes[cls]) subjects[subj].classes[cls] = {records:[]};
